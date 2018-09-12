@@ -1,0 +1,24 @@
+# .travis.yml for arduino projects
+language: python
+python:
+  - "2.7"
+sudo: false
+cache:
+  directories:
+    - "~/.platformio"
+addons:
+  apt:
+    packages:
+      - cppcheck
+      - astyle
+
+install:
+  - pip install -U platformio
+
+script:
+  - cppcheck --error-exitcode=1 --enable=warning,style,performance,portability -v --language=c src
+  # check if any style violation is found
+  - astyle --dry-run --formatted --project --recursive 'src/*.c,*.cpp,*.h,*.ino' | tee astyle.log
+  # exit with non-zero when found
+  - grep -v '^Formatted' astyle.log
+  - pio run -v
