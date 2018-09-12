@@ -1,0 +1,16 @@
+# commented-out options are not supported by the version of astyle in travisci
+--mode=c
+--style=linux
+--pad-header
+#--break-return-type
+#--attach-return-type-decl
+--break-after-logical
+--pad-oper
+#--pad-comma
+--unpad-paren
+--align-pointer=name
+--align-reference=name
+--max-code-length=100
+--indent=tab
+--exclude=lib/readme.txt
+--ignore-exclude-errors-x

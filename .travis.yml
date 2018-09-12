@@ -16,9 +16,12 @@ install:
   - pip install -U platformio
 
 script:
-  - cppcheck --error-exitcode=1 --enable=warning,style,performance,portability -v --language=c src
+  - cppcheck --version
+  - cppcheck --error-exitcode=1 --enable=warning,style,performance,portability -v --language=c src/*.ino
   # check if any style violation is found
-  - astyle --dry-run --formatted --project --recursive 'src/*.c,*.cpp,*.h,*.ino' | tee astyle.log
+  - astyle --version
+  - astyle --formatted --options=.astylerc --recursive 'src/*.ino' | tee astyle.log
   # exit with non-zero when found
   - grep -v '^Formatted' astyle.log
+  - for i in `awk '/^Formatted/ { print $2 }' astyle.log`; do diff -u src/${i}.orig src/${i}; done
   - pio run -v
