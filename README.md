@@ -1,5 +1,7 @@
 # e-example-BME280-arduino
 
+[![Build Status](https://travis-ci.com/trombik/e-example-BME280-arduino.svg?branch=master)](https://travis-ci.com/trombik/e-example-BME280-arduino)
+
 An example project using popular environmental sensor,
 [BME280](https://www.bosch-sensortec.com/bst/products/all_products/bme280).
 The device reads values from BME280, such as temperature, humidity, and
