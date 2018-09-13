@@ -1,1 +1,1 @@
-set noexpandtab
+autocmd FileType c,cpp,arduino set noexpandtab
