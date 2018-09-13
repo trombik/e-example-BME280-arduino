@@ -24,4 +24,4 @@ script:
   # exit with non-zero when found
   - grep -v '^Formatted' astyle.log
   - for i in `awk '/^Formatted/ { print $2 }' astyle.log`; do diff -u src/${i}.orig src/${i}; done
-  - pio run -v
+  - PLATFORMIO_SRC_BUILD_FLAGS="-DTHINGSPEAK_API_CHANNEL=1 -DTHINGSPEAK_API_KEY=THINGSPEAK_API_KEY" pio run -v
