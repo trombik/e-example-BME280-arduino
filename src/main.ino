@@ -5,6 +5,9 @@
 #include <WiFiManager.h>
 #include <ESP8266WiFi.h>
 
+/* for ThingSpeak API */
+#include "ThingSpeak.h"
+
 /* for OLED display */
 #include <OLEDDisplayUi.h>
 #include <SSD1306Brzo.h>
@@ -20,6 +23,7 @@
 #if !defined(SCL)
 #define SCL D3
 #endif
+
 #if !defined(SDA)
 #define SDA D4
 #endif
@@ -28,6 +32,7 @@
 #if !defined(I2C_ADDRESS_BME280)
 #define I2C_ADDRESS_BME280  0x76
 #endif
+
 #if !defined(I2C_ADDRESS_SSD1306)
 #define I2C_ADDRESS_SSD1306  0x3C
 #endif
@@ -37,17 +42,20 @@
 /* Maximum number of lines of log buffer */
 #define MAX_N_LINE  (5)
 
-/* seed for random().
- * use fixed value during development so that you do not have to change
- * password of WiFiManager AP.
- *
- * if in production, float A0 pin so that noise generates random seed
- */
-#if defined(RELEASE_BUILD)
-#define SEED	analogRead(0)
-#else
-#define SEED	(1)
+/* key and channel number of ThingSpeak API, mandatory */
+#if !defined(THINGSPEAK_API_KEY)
+#error THINGSPEAK_API_KEY must be defined
 #endif
+#if !defined(THINGSPEAK_API_CHANNEL)
+#error THINGSPEAK_API_CHANNEL must be defined
+#endif
+
+/* Fields in the channel. Create a channel on ThingSpeak accordingly.
+ * By default, a channel has one field. Add additional two field.
+ */
+#define THINGSPEAK_API_FIELD_TEMPERATURE (1)
+#define THINGSPEAK_API_FIELD_HUMIDITY	(2)
+#define THINGSPEAK_API_FIELD_PRESSURE	(3)
 
 /* bme280 device instance */
 static struct bme280_dev dev;
@@ -63,6 +71,36 @@ OLEDDisplayUi ui(&display);
  * max length of 8 + null character
  */
 char password[9];
+
+/* required for ThingSpeak API */
+WiFiClient client;
+/* macros for stringizing a macro.
+ * https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html
+ */
+#define str(s) #s
+#define xstr(s) str(s)
+const char thingspeak_api_key[] = xstr(THINGSPEAK_API_KEY);
+const uint32_t thingspeak_api_channel = THINGSPEAK_API_CHANNEL;
+
+/* update interval in sec. for free tier, must be more than 30 (two updates
+ * per minute). Default is 300
+ */
+#if !defined(THINGSPEAK_API_INTERVAL)
+#define THINGSPEAK_API_INTERVAL	(300)
+#endif
+const uint16_t interval_thingspeak_update_sec = THINGSPEAK_API_INTERVAL;
+
+/* interval in sec to read values from BME280. */
+#if !defined(READ_INTERVAL)
+#define READ_INTERVAL	(1)
+#endif
+uint16_t interval_read_sec = READ_INTERVAL;
+
+/* last updated time of ThingSpeak fileds in millis */
+uint32_t last_thingspeak_updated_millis = 0;
+
+/* last time in millis when values are read from BME280 */
+uint32_t last_read_millis = 0;
 
 void
 halt()
@@ -214,8 +252,14 @@ setup()
 	Serial.println();
 	Serial.println(__FILE__);
 
-	/* seed random(). the value is fixed during development */
-	randomSeed(SEED);
+	/* seed random(). the value is fixed during development.
+	 * if in production, float A0 pin so that noise generates random seed
+	 */
+#if defined(RELEASE_BUILD)
+	randomSeed(analogRead(0));
+#else
+	randomSeed(1);
+#endif
 	snprintf(ssid, sizeof(ssid), "ESP%i", ESP.getChipId());
 	snprintf(password, sizeof(password), "%li", random(10000000, 99999999));
 
@@ -251,6 +295,7 @@ setup()
 	logBootMessage("Connected.");
 	logBootMessage("IPv4: " + WiFi.localIP().toString());
 	logBootMessage("GW: " + WiFi.gatewayIP().toString());
+	ThingSpeak.begin(client);
 }
 
 void
@@ -265,9 +310,17 @@ sleep()
 void
 loop()
 {
-	if (bme280_get_sensor_data(BME280_ALL, &data, &dev) != 0) {
-		Serial.println(F("bme280_get_sensor_data()"));
-		goto err;
+	int err = 0;
+	uint32_t current_millis = millis();
+	if (current_millis - last_read_millis > interval_read_sec * 1000 ||
+	    last_read_millis == 0) {
+		err = bme280_get_sensor_data(BME280_ALL, &data, &dev);
+		if (err != 0) {
+			Serial.print(F("bme280_get_sensor_data: "));
+			goto err;
+		}
+	} else {
+		goto do_nothing;
 	}
 	Serial.print(F("T: "));
 	Serial.print(float2string((float)data.temperature / 100));
@@ -279,6 +332,30 @@ loop()
 	Serial.print(float2string((float)data.pressure / 1000));
 	Serial.print(F(" Pa"));
 	Serial.println();
+	if (current_millis - last_thingspeak_updated_millis > interval_thingspeak_update_sec * 1000) {
+		ThingSpeak.setField(
+		    THINGSPEAK_API_FIELD_TEMPERATURE,
+		    (float)data.temperature / 100
+		);
+		ThingSpeak.setField(
+		    THINGSPEAK_API_FIELD_HUMIDITY,
+		    (float)data.humidity / 1024
+		);
+		ThingSpeak.setField(
+		    THINGSPEAK_API_FIELD_PRESSURE,
+		    (float)data.pressure / 1000
+		);
+		err = ThingSpeak.writeFields(thingspeak_api_channel, thingspeak_api_key);
+		if (err != OK_SUCCESS) {
+			Serial.print("writeFields: ");
+			goto err;
+		}
+	}
+
 err:
-	delay(1000);
+	if (err != 0) {
+		Serial.println(err);
+	}
+do_nothing:
+	yield();
 }
