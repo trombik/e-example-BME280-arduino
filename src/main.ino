@@ -37,8 +37,17 @@
 /* Maximum number of lines of log buffer */
 #define MAX_N_LINE  (5)
 
-/* WiFi Connection manager, runs web configuration portal */
-WiFiManager wifiManager;
+/* seed for random().
+ * use fixed value during development so that you do not have to change
+ * password of WiFiManager AP.
+ *
+ * if in production, float A0 pin so that noise generates random seed
+ */
+#if defined(RELEASE_BUILD)
+#define SEED	analogRead(0)
+#else
+#define SEED	(1)
+#endif
 
 /* bme280 device instance */
 static struct bme280_dev dev;
@@ -49,6 +58,11 @@ static struct bme280_data data;
 SSD1306Brzo display(I2C_ADDRESS_SSD1306, SDA, SCL);
 /* UI instance */
 OLEDDisplayUi ui(&display);
+
+/* password of WiFiManager AP, not the network the device will connect to.
+ * max length of 8 + null character
+ */
+char password[9];
 
 void
 halt()
@@ -171,17 +185,39 @@ float2string(float f)
 	return buffer;
 }
 
+/* A callback to show WiFi AP information on the display.
+ *
+ * called when AP has started (after wifiManager.autoConnect()).
+ */
+void
+callbackWiFiManager(WiFiManager *manager)
+{
+	logBootMessage("AP started");
+	logBootMessage("SSID: " + manager->getConfigPortalSSID());
+	logBootMessage("IP: " + WiFi.softAPIP().toString());
+	logBootMessage("PW: " + String(password));
+}
+
 void
 setup()
 {
 	int err;
-	uint32_t time_wifi_connect_started;
-	uint32_t duration_wifi_timeout = 30 * 1000;
+
+	/* SSID. prefixed with "ESP", followed by eight digit chip ID. */
+	char ssid[3 + 8 + 1];
+
+	/* WiFi Connection manager, runs web configuration portal */
+	WiFiManager wifiManager;
 
 	Serial.begin(115200);
 	delay(3);
 	Serial.println();
 	Serial.println(__FILE__);
+
+	/* seed random(). the value is fixed during development */
+	randomSeed(SEED);
+	snprintf(ssid, sizeof(ssid), "ESP%i", ESP.getChipId());
+	snprintf(password, sizeof(password), "%li", random(10000000, 99999999));
 
 	Serial.println(F("initializing I2C"));
 	err = i2c_init();
@@ -200,40 +236,21 @@ setup()
 	}
 
 	logBootMessage(F("Connecting to WiFi"));
-	WiFi.begin("AP_NAME", "PASSWORD");
-	time_wifi_connect_started = millis();
-	while (WiFi.status() != WL_CONNECTED) {
-		if ((millis() - time_wifi_connect_started) > duration_wifi_timeout) {
-			logBootMessage("WiFi.begin timeout");
-			halt();
-		}
-		delay(1000);
-		Serial.print(".");
+
+	/* set a callback function when AP mode starts */
+	wifiManager.setAPCallback(callbackWiFiManager);
+
+	/* try to connect to previous network if found in memory. run
+	 * configuration portal if not found, or if the attempt has failed.
+	 */
+	if (!wifiManager.autoConnect(ssid, password)) {
+		/* either connection failed or timed out */
+		logBootMessage("autoConnect()");
+		halt();
 	}
-	Serial.println();
 	logBootMessage("Connected.");
 	logBootMessage("IPv4: " + WiFi.localIP().toString());
 	logBootMessage("GW: " + WiFi.gatewayIP().toString());
-}
-
-float get_temparature()
-{
-	float t = 11.1;
-	return t;
-}
-
-float
-get_humidiy()
-{
-	float h = 80.1;
-	return h;
-}
-
-float
-get_presure()
-{
-	float p = 1011.1;
-	return p;
 }
 
 void
