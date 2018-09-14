@@ -13,7 +13,8 @@
 #include <SSD1306Brzo.h>
 
 /* for custom font, Roboto_Mono_6 */
-#include "font.h"
+#include "Roboto_Mono_10.h"
+#include "DejaVu_Serif_27.h"
 
 /* bme280 device driver */
 #include <TRB_BME280.h>
@@ -66,6 +67,12 @@ static struct bme280_data data;
 SSD1306Brzo display(I2C_ADDRESS_SSD1306, SDA, SCL);
 /* UI instance */
 OLEDDisplayUi ui(&display);
+
+/* frames of ui */
+void frame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void frame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+FrameCallback frames[] = { frame1, frame2 };
+uint8_t n_frames = 2;
 
 /* password of WiFiManager AP, not the network the device will connect to.
  * max length of 8 + null character
@@ -186,6 +193,41 @@ display_init()
 	display.display();
 }
 
+void
+init_ui()
+{
+	ui.setTargetFPS(10);
+	ui.enableAutoTransition();
+	ui.setTimePerFrame(3 * 1000);
+	ui.setTimePerTransition(500);
+	ui.disableAllIndicators();
+	ui.setFrames(frames, n_frames);
+	ui.init();
+}
+
+void
+frame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+	char buf[3 + 2 + 1]; // (-)\d\d 'C
+	uint8_t hight_text = DejaVu_Serif_27[1];
+	display->setFont(DejaVu_Serif_27);
+	display->setTextAlignment(TEXT_ALIGN_RIGHT);
+
+	snprintf(buf, sizeof(buf), "%-2d %c", data.temperature / 100, 67);
+	display->drawString(128 + x, 0 + y, buf);
+
+	snprintf(buf, sizeof(buf), "%2d %%", data.humidity / 1024);
+	display->drawString(128 + x, hight_text + y, buf);
+}
+
+void
+frame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+	display->setFont(DejaVu_Serif_27);
+	display->setTextAlignment(TEXT_ALIGN_CENTER);
+	display->drawString(64 + x, 0 + y, "ESP8266");
+}
+
 /*
  * Log a message to serial console and the OLED display.
  *
@@ -198,6 +240,7 @@ void
 logBootMessage(const String text)
 {
 	Serial.println(text);
+	display.setFont(Roboto_Mono_10);
 	display.clear();
 	display.println(text);
 	display.drawLogBuffer(0, 0);
@@ -270,6 +313,7 @@ setup()
 	}
 
 	Serial.println(F("initializing OLED display"));
+	init_ui();
 	display_init();
 
 	logBootMessage(F("initializing BME280"));
@@ -311,7 +355,14 @@ void
 loop()
 {
 	int err = 0;
-	uint32_t current_millis = millis();
+	int remainingTimeBudget;
+	uint32_t current_millis;
+
+	current_millis = millis();
+	remainingTimeBudget = ui.update();
+	if (remainingTimeBudget <= 0) {
+		goto do_nothing;
+	}
 	if (current_millis - last_read_millis > interval_read_sec * 1000 ||
 	    last_read_millis == 0) {
 		err = bme280_get_sensor_data(BME280_ALL, &data, &dev);
@@ -319,6 +370,7 @@ loop()
 			Serial.print(F("bme280_get_sensor_data: "));
 			goto err;
 		}
+		last_read_millis = current_millis;
 	} else {
 		goto do_nothing;
 	}
@@ -345,11 +397,14 @@ loop()
 		    THINGSPEAK_API_FIELD_PRESSURE,
 		    (float)data.pressure / 1000
 		);
+		Serial.println(F("sending values to thingspeak"));
 		err = ThingSpeak.writeFields(thingspeak_api_channel, thingspeak_api_key);
 		if (err != OK_SUCCESS) {
 			Serial.print("writeFields: ");
 			goto err;
 		}
+		Serial.println(F("values have been sent successfully."));
+		last_thingspeak_updated_millis = current_millis;
 	}
 
 err:
