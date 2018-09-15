@@ -11,7 +11,7 @@ end
 
 task :astyle do
   sh "astyle --version"
-  sh "astyle --formatted --options=.astylerc --recursive 'src/*.ino'"
+  sh "astyle --formatted --options=.astylerc --recursive 'src/*.ino,*.cpp,*.h'"
 end
 
 task build: %i{cppcheck} do
