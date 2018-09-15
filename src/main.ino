@@ -384,7 +384,8 @@ loop()
 	Serial.print(float2string((float)data.pressure / 1000));
 	Serial.print(F(" Pa"));
 	Serial.println();
-	if (current_millis - last_thingspeak_updated_millis > interval_thingspeak_update_sec * 1000) {
+	if (current_millis - last_thingspeak_updated_millis > interval_thingspeak_update_sec * 1000 ||
+	    last_thingspeak_updated_millis == 0) {
 		ThingSpeak.setField(
 		    THINGSPEAK_API_FIELD_TEMPERATURE,
 		    (float)data.temperature / 100
@@ -399,12 +400,18 @@ loop()
 		);
 		Serial.println(F("sending values to thingspeak"));
 		err = ThingSpeak.writeFields(thingspeak_api_channel, thingspeak_api_key);
+
+		/* regardless the result of writeFields(), update the counter so that
+		 * it does not repeatedly try to submit values when the failure
+		 * persists. otherwise, the UI (the display) gets interrupted often,
+		 * too.
+		 */
+		last_thingspeak_updated_millis = current_millis;
 		if (err != OK_SUCCESS) {
 			Serial.print("writeFields: ");
 			goto err;
 		}
 		Serial.println(F("values have been sent successfully."));
-		last_thingspeak_updated_millis = current_millis;
 	}
 
 err:
