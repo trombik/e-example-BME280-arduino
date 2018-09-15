@@ -89,6 +89,11 @@ WiFiClient client;
 const char thingspeak_api_key[] = xstr(THINGSPEAK_API_KEY);
 const uint32_t thingspeak_api_channel = THINGSPEAK_API_CHANNEL;
 
+/* pin number to enable/disable thingspeak support. if this pin is high,
+ * thingspeak is enabled, and sensor values will be sent to thingspeak.
+ */
+#define THINGSPEAK_ENABLE_PIN	D5
+
 /* update interval in sec. for free tier, must be more than 30 (two updates
  * per minute). Default is 300
  */
@@ -229,6 +234,30 @@ frame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 }
 
 /*
+ * \brief returns if thingspeak is enabled or not
+ *
+ * A pin is connected to a SPDT switch, a Single Pole Double Throw switch,
+ * commonly known as `slide switch`
+ *
+ * Vcc --------o
+ *              \
+ *               `o---- COM --> micro controller's digital pin
+ *
+ * GND --------o    a SPDT switch
+ *
+ * The common is connected to one of pins of micro controller. Others are to
+ * Vcc and GND. THINGSPEAK_ENABLE_PIN must be pulled up by
+ * `pinMode(THINGSPEAK_ENABLE_PIN, INPUT_PULLUP)`.
+ *
+ * \return bool
+ */
+bool
+is_thingspeak_enabled()
+{
+	return digitalRead(THINGSPEAK_ENABLE_PIN) == HIGH ? true : false;
+}
+
+/*
  * Log a message to serial console and the OLED display.
  *
  * The given text will be displayed to console and display. The message will
@@ -339,6 +368,7 @@ setup()
 	logBootMessage("Connected.");
 	logBootMessage("IPv4: " + WiFi.localIP().toString());
 	logBootMessage("GW: " + WiFi.gatewayIP().toString());
+	pinMode(THINGSPEAK_ENABLE_PIN, INPUT_PULLUP);
 	ThingSpeak.begin(client);
 }
 
@@ -384,8 +414,9 @@ loop()
 	Serial.print(float2string((float)data.pressure / 1000));
 	Serial.print(F(" Pa"));
 	Serial.println();
-	if (current_millis - last_thingspeak_updated_millis > interval_thingspeak_update_sec * 1000 ||
-	    last_thingspeak_updated_millis == 0) {
+	if (is_thingspeak_enabled() &&
+	    (current_millis - last_thingspeak_updated_millis > interval_thingspeak_update_sec * 1000 ||
+	     last_thingspeak_updated_millis == 0)) {
 		ThingSpeak.setField(
 		    THINGSPEAK_API_FIELD_TEMPERATURE,
 		    (float)data.temperature / 100
@@ -412,6 +443,10 @@ loop()
 			goto err;
 		}
 		Serial.println(F("values have been sent successfully."));
+
+		/* explicitly set zero because non-error status code of
+		 * ThingSpeak.writeFields is 200 */
+		err = 0;
 	}
 
 err:
