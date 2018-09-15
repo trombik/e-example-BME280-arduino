@@ -5,8 +5,8 @@
 #include <WiFiManager.h>
 #include <ESP8266WiFi.h>
 
-/* for ThingSpeak API */
-#include "ThingSpeak.h"
+/* ThingSpeak API updater */
+#include "ThingSpeakUpdater.h"
 
 /* for OLED display */
 #include <OLEDDisplayUi.h>
@@ -51,13 +51,6 @@
 #error THINGSPEAK_API_CHANNEL must be defined
 #endif
 
-/* Fields in the channel. Create a channel on ThingSpeak accordingly.
- * By default, a channel has one field. Add additional two field.
- */
-#define THINGSPEAK_API_FIELD_TEMPERATURE (1)
-#define THINGSPEAK_API_FIELD_HUMIDITY	(2)
-#define THINGSPEAK_API_FIELD_PRESSURE	(3)
-
 /* bme280 device instance */
 static struct bme280_dev dev;
 /* data structure returned by the bme280 driver */
@@ -67,6 +60,9 @@ static struct bme280_data data;
 SSD1306Brzo display(I2C_ADDRESS_SSD1306, SDA, SCL);
 /* UI instance */
 OLEDDisplayUi ui(&display);
+
+/* ThingSpeak worker that updates sensor values */
+ThingSpeakUpdater ThingSpeakUpdater;
 
 /* frames of ui */
 void frame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -79,8 +75,6 @@ uint8_t n_frames = 2;
  */
 char password[9];
 
-/* required for ThingSpeak API */
-WiFiClient client;
 /* macros for stringizing a macro.
  * https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html
  */
@@ -369,7 +363,11 @@ setup()
 	logBootMessage("IPv4: " + WiFi.localIP().toString());
 	logBootMessage("GW: " + WiFi.gatewayIP().toString());
 	pinMode(THINGSPEAK_ENABLE_PIN, INPUT_PULLUP);
-	ThingSpeak.begin(client);
+	ThingSpeakUpdater.begin(
+	    thingspeak_api_key,
+	    thingspeak_api_channel,
+	    interval_thingspeak_update_sec
+	);
 }
 
 void
@@ -414,41 +412,16 @@ loop()
 	Serial.print(float2string((float)data.pressure / 1000));
 	Serial.print(F(" Pa"));
 	Serial.println();
-	if (is_thingspeak_enabled() &&
-	    (current_millis - last_thingspeak_updated_millis > interval_thingspeak_update_sec * 1000 ||
-	     last_thingspeak_updated_millis == 0)) {
-		ThingSpeak.setField(
-		    THINGSPEAK_API_FIELD_TEMPERATURE,
-		    (float)data.temperature / 100
-		);
-		ThingSpeak.setField(
-		    THINGSPEAK_API_FIELD_HUMIDITY,
-		    (float)data.humidity / 1024
-		);
-		ThingSpeak.setField(
-		    THINGSPEAK_API_FIELD_PRESSURE,
-		    (float)data.pressure / 1000
-		);
-		Serial.println(F("sending values to thingspeak"));
-		err = ThingSpeak.writeFields(thingspeak_api_channel, thingspeak_api_key);
-
-		/* regardless the result of writeFields(), update the counter so that
-		 * it does not repeatedly try to submit values when the failure
-		 * persists. otherwise, the UI (the display) gets interrupted often,
-		 * too.
-		 */
-		last_thingspeak_updated_millis = current_millis;
-		if (err != OK_SUCCESS) {
-			Serial.print("writeFields: ");
+	if (is_thingspeak_enabled()) {
+		err = ThingSpeakUpdater.update(data, current_millis);
+		if (err != 200 && err != 0) {
+			Serial.print("ThingSpeakUpdater.update()");
 			goto err;
 		}
-		Serial.println(F("values have been sent successfully."));
-
 		/* explicitly set zero because non-error status code of
 		 * ThingSpeak.writeFields is 200 */
 		err = 0;
 	}
-
 err:
 	if (err != 0) {
 		Serial.println(err);
