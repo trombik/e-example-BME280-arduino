@@ -355,15 +355,6 @@ setup()
 }
 
 void
-sleep()
-{
-	if (bme280_set_sensor_mode(BME280_SLEEP_MODE, &dev) != 0) {
-		Serial.println(F("bme280_set_sensor_mode()"));
-	}
-	delay(1000);
-}
-
-void
 loop()
 {
 	int err = 0;
