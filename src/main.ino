@@ -7,6 +7,7 @@
 
 /* ThingSpeak API updater */
 #include "ThingSpeakUpdater.h"
+#include "BME280Reader.h"
 
 /* for OLED display */
 #include <OLEDDisplayUi.h>
@@ -60,6 +61,9 @@ static struct bme280_data data;
 SSD1306Brzo display(I2C_ADDRESS_SSD1306, SDA, SCL);
 /* UI instance */
 OLEDDisplayUi ui(&display);
+
+/* BME280 reader that reads values from the device at intervals */
+BME280Reader reader;
 
 /* ThingSpeak worker that updates sensor values */
 ThingSpeakUpdater ThingSpeakUpdater;
@@ -128,7 +132,7 @@ i2c_init()
 }
 
 int
-bme280_init()
+init_bme280()
 {
 	int err;
 	struct bme280_settings settings;
@@ -148,24 +152,23 @@ bme280_init()
 	settings_sel = BME280_OSR_PRESS_SEL | BME280_OSR_TEMP_SEL |
 	               BME280_OSR_HUM_SEL | BME280_FILTER_SEL;
 
-	dev = trb_bme280_create_i2c_dev(I2C_ADDRESS_BME280, settings);
-	err = bme280_init(&dev);
-	if (err != BME280_OK) {
-		Serial.println(F("bme280_init()"));
+	if ((err = reader.begin(I2C_ADDRESS_BME280, settings, interval_read_sec * 1000)) != 0) {
+		Serial.print(F("reader.begin()"));
 		goto fail;
 	}
-	err = bme280_set_sensor_settings(settings_sel, &dev);
-	if (err != 0) {
-		Serial.println(F("bme280_set_sensor_settings()"));
+	if ((err = reader.setConfig(settings_sel)) != 0) {
+		Serial.print(F("reader.setConfig()"));
 		goto fail;
 	}
-	err = bme280_set_sensor_mode(BME280_NORMAL_MODE, &dev);
-	if (err != 0) {
-		Serial.println(F("bme280_set_sensor_mode()"));
+	if ((err = reader.setMode(BME280_NORMAL_MODE)) != 0) {
+		Serial.println(F("reader.setMode()"));
 		goto fail;
 	}
 	err = 0;
 fail:
+	if (err != 0) {
+		Serial.println(err);
+	}
 	return err;
 }
 
@@ -270,25 +273,6 @@ logBootMessage(const String text)
 	display.display();
 }
 
-char *
-float2string(float f)
-{
-	/* -ddddd.dd */
-	/* 5 digits + 2 digits + 1 character for `-` + 1 character for `.` 9
-	 * characters in total. the buffer needs another byte for NULL
-	 * terminater. minimum buffer size is 10. */
-	static char buffer[10];
-
-	/* as it cannot handle more than 100000, return invalid strings, as in
-	 * float */
-	if (f >= 100000 || f <= -100000) {
-		strlcpy(buffer, "-XXXXX.XX", sizeof(buffer));
-	} else {
-		dtostrf(f, 9, 2, buffer);
-	}
-	return buffer;
-}
-
 /* A callback to show WiFi AP information on the display.
  *
  * called when AP has started (after wifiManager.autoConnect()).
@@ -340,7 +324,7 @@ setup()
 	display_init();
 
 	logBootMessage(F("initializing BME280"));
-	err = bme280_init();
+	err = init_bme280();
 	if (err != 0) {
 		logBootMessage(F("bme280_init"));
 		halt();
@@ -383,45 +367,23 @@ void
 loop()
 {
 	int err = 0;
-	int remainingTimeBudget;
 	uint32_t current_millis;
 
 	current_millis = millis();
-	remainingTimeBudget = ui.update();
-	if (remainingTimeBudget <= 0) {
+	if (ui.update() <= 0) {
 		goto do_nothing;
 	}
-	if (current_millis - last_read_millis > interval_read_sec * 1000 ||
-	    last_read_millis == 0) {
-		err = bme280_get_sensor_data(BME280_ALL, &data, &dev);
-		if (err != 0) {
-			Serial.print(F("bme280_get_sensor_data: "));
-			goto err;
-		}
-		last_read_millis = current_millis;
-	} else {
-		goto do_nothing;
+	if ((err = reader.read(&data, current_millis)) != 0) {
+		goto err;
 	}
-	Serial.print(F("T: "));
-	Serial.print(float2string((float)data.temperature / 100));
-	Serial.print(F(" degree "));
-	Serial.print(F("F: "));
-	Serial.print(float2string((float)data.humidity / 1024));
-	Serial.print(F(" % "));
-	Serial.print(F("P: "));
-	Serial.print(float2string((float)data.pressure / 1000));
-	Serial.print(F(" Pa"));
-	Serial.println();
 	if (is_thingspeak_enabled()) {
 		err = ThingSpeakUpdater.update(data, current_millis);
 		if (err != 200 && err != 0) {
 			Serial.print(F("ThingSpeakUpdater.update()"));
 			goto err;
 		}
-		/* explicitly set zero because non-error status code of
-		 * ThingSpeak.writeFields is 200 */
-		err = 0;
 	}
+	err = 0;
 err:
 	if (err != 0) {
 		Serial.println(err);
