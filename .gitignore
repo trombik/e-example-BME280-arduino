@@ -2,3 +2,5 @@
 .piolibdeps
 /vendor/
 /.bundle/
+*.swp
+*.orig
