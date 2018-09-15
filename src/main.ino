@@ -185,10 +185,10 @@ display_init()
 	display.displayOn();
 	if (!display.setLogBuffer(MAX_N_LINE, MAX_LINE_LENGTH)) {
 		/* malloc() failed */
-		Serial.println("setLogBuffer()");
+		Serial.println(F("setLogBuffer()"));
 		halt();
 	}
-	logBootMessage("Starting.");
+	logBootMessage(F("Starting."));
 	display.display();
 }
 
@@ -296,7 +296,7 @@ float2string(float f)
 void
 callbackWiFiManager(WiFiManager *manager)
 {
-	logBootMessage("AP started");
+	logBootMessage(F("AP started"));
 	logBootMessage("SSID: " + manager->getConfigPortalSSID());
 	logBootMessage("IP: " + WiFi.softAPIP().toString());
 	logBootMessage("PW: " + String(password));
@@ -342,7 +342,7 @@ setup()
 	logBootMessage(F("initializing BME280"));
 	err = bme280_init();
 	if (err != 0) {
-		logBootMessage("bme280_init");
+		logBootMessage(F("bme280_init"));
 		halt();
 	}
 
@@ -356,10 +356,10 @@ setup()
 	 */
 	if (!wifiManager.autoConnect(ssid, password)) {
 		/* either connection failed or timed out */
-		logBootMessage("autoConnect()");
+		logBootMessage(F("autoConnect()"));
 		halt();
 	}
-	logBootMessage("Connected.");
+	logBootMessage(F("Connected."));
 	logBootMessage("IPv4: " + WiFi.localIP().toString());
 	logBootMessage("GW: " + WiFi.gatewayIP().toString());
 	pinMode(THINGSPEAK_ENABLE_PIN, INPUT_PULLUP);
@@ -415,7 +415,7 @@ loop()
 	if (is_thingspeak_enabled()) {
 		err = ThingSpeakUpdater.update(data, current_millis);
 		if (err != 200 && err != 0) {
-			Serial.print("ThingSpeakUpdater.update()");
+			Serial.print(F("ThingSpeakUpdater.update()"));
 			goto err;
 		}
 		/* explicitly set zero because non-error status code of
