@@ -26,7 +26,7 @@ class ThingSpeakUpdater
 	const char *apiKey;
 	WiFiClient client;
 
-	public:
+public:
 	ThingSpeakUpdater()
 	{
 		apiKey = NULL;
@@ -61,18 +61,18 @@ class ThingSpeakUpdater
 	{
 		int err = 0;
 		if (updateTimeMillis - lastUpdatedMillis > intervalMillis ||
-	        lastUpdatedMillis == 0) {
+		    lastUpdatedMillis == 0) {
 			ThingSpeak.setField(
-				THINGSPEAK_API_FIELD_TEMPERATURE,
-				(float)data.temperature / 100
+			    THINGSPEAK_API_FIELD_TEMPERATURE,
+			    (float)data.temperature / 100
 			);
 			ThingSpeak.setField(
-				THINGSPEAK_API_FIELD_HUMIDITY,
-				(float)data.humidity / 1024
+			    THINGSPEAK_API_FIELD_HUMIDITY,
+			    (float)data.humidity / 1024
 			);
 			ThingSpeak.setField(
-				THINGSPEAK_API_FIELD_PRESSURE,
-				(float)data.pressure / 1000
+			    THINGSPEAK_API_FIELD_PRESSURE,
+			    (float)data.pressure / 1000
 			);
 			err = ThingSpeak.writeFields(channelNumber, apiKey);
 
