@@ -215,7 +215,7 @@ drawFrame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y
 	display->setFont(DejaVu_Serif_27);
 	display->setTextAlignment(TEXT_ALIGN_RIGHT);
 
-	snprintf(buf, sizeof(buf), "%-2d %c", data.temperature / 100, 67);
+	snprintf(buf, sizeof(buf), "%-2d°C", data.temperature / 100);
 	display->drawString(128 + x, 0 + y, buf);
 
 	snprintf(buf, sizeof(buf), "%2d %%", data.humidity / 1024);
