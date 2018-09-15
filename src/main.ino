@@ -69,9 +69,9 @@ BME280Reader reader;
 ThingSpeakUpdater ThingSpeakUpdater;
 
 /* frames of ui */
-void frame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-void frame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-FrameCallback frames[] = { frame1, frame2 };
+void drawFrame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+FrameCallback frames[] = { drawFrame1, drawFrame2 };
 uint8_t n_frames = 2;
 
 /* password of WiFiManager AP, not the network the device will connect to.
@@ -123,7 +123,7 @@ halt()
 }
 
 int
-i2c_init()
+initI2C()
 {
 	Serial.println(F("Initializing I2C (brzo)"));
 	brzo_i2c_setup(SDA, SCL, 200);
@@ -132,7 +132,7 @@ i2c_init()
 }
 
 int
-init_bme280()
+initBME280()
 {
 	int err;
 	struct bme280_settings settings;
@@ -178,7 +178,7 @@ fail:
  * boot message.
  */
 void
-display_init()
+initDisplay()
 {
 	display.init();
 	display.clear();
@@ -196,7 +196,7 @@ display_init()
 }
 
 void
-init_ui()
+initUI()
 {
 	ui.setTargetFPS(10);
 	ui.enableAutoTransition();
@@ -208,7 +208,7 @@ init_ui()
 }
 
 void
-frame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+drawFrame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
 	char buf[3 + 2 + 1]; // (-)\d\d 'C
 	uint8_t hight_text = DejaVu_Serif_27[1];
@@ -223,7 +223,7 @@ frame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 }
 
 void
-frame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+drawFrame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
 	display->setFont(DejaVu_Serif_27);
 	display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -249,7 +249,7 @@ frame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
  * \return bool
  */
 bool
-is_thingspeak_enabled()
+isThingSpeakEnabled()
 {
 	return digitalRead(THINGSPEAK_ENABLE_PIN) == HIGH ? true : false;
 }
@@ -314,17 +314,17 @@ setup()
 	snprintf(password, sizeof(password), "%li", random(10000000, 99999999));
 
 	Serial.println(F("initializing I2C"));
-	err = i2c_init();
+	err = initI2C();
 	if (err != 0) {
 		halt();
 	}
 
 	Serial.println(F("initializing OLED display"));
-	init_ui();
-	display_init();
+	initUI();
+	initDisplay();
 
 	logBootMessage(F("initializing BME280"));
-	err = init_bme280();
+	err = initBME280();
 	if (err != 0) {
 		logBootMessage(F("bme280_init"));
 		halt();
@@ -367,7 +367,7 @@ loop()
 	if ((err = reader.read(&data, current_millis)) != 0) {
 		goto err;
 	}
-	if (is_thingspeak_enabled()) {
+	if (isThingSpeakEnabled()) {
 		err = ThingSpeakUpdater.update(data, current_millis);
 		if (err != 200 && err != 0) {
 			Serial.print(F("ThingSpeakUpdater.update()"));
